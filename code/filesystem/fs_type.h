@@ -40,4 +40,16 @@ namespace dl {
 // use bit operation
 use_bit_op(dl::filesystem::mode);
 
+namespace dl {
+	namespace filesystem {
+		constexpr inline std::ios::openmode convert_openmode(mode m)
+		{
+			return ((mode::read & m) == mode::unknown ? 0 : std::ios::in)
+				 | ((mode::write & m) == mode::unknown ? 0 : std::ios::out)
+				 | ((mode::append & m) == mode::unknown ? 0 : std::ios::ate)
+				 | ((mode::create & m) == mode::unknown ? 0 : std::ios::out)
+				;
+		}
+	}
+}
 #endif

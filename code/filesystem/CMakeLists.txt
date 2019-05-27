@@ -5,13 +5,23 @@ make_library(${target} "STATIC")
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 add_sources(${target}
-    "Source Files"
+    "pack"
+    "pack.cpp"
+    "pack.h"
+)
+
+add_sources(${target}
+    "filesystem"
     "filesystem.cpp"
+    "filesystem.h"
+)
+
+add_sources(${target}
+    "Source Files"
 )
 
 add_sources(${target}
     "Header Files"
-    "filesystem.h"
     "file.h"
     "fs_type.h"
 )
