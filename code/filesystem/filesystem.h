@@ -7,6 +7,7 @@
 #include "fs_type.h"
 #include <string>
 #include <vector>
+#include <filesystem>
 
 namespace dl { 
     namespace filesystem {
@@ -30,12 +31,6 @@ namespace dl {
             virtual file_type open(const string& path, mode mode) const = 0;
             virtual bool close(file_type& file) const = 0;
 
-            virtual size_t size(const file_type& file) const = 0;
-			virtual size_t read(file_type& file, byte* buf) { return read(file, file->size, buf); }
-			virtual size_t read(file_type& file, size_t len, byte* buf) = 0;
-            virtual size_t write(file_type& file, size_t len, const byte* buf) = 0;
-
-
             virtual bool create(const string& path) = 0;
             virtual bool remove(const string& path, bool bRecursive = false) = 0;
 
@@ -44,10 +39,41 @@ namespace dl {
             string alias;
         };
 
-		class filesystem : public basic_file_system {
+
+
+		class natural_file
+			: public basic_file
+		{
+		public:
+			friend class filesystem;
+			using openmode = std::ios::openmode;
+
+		public:
+			size_t read(byte* buf, size_t len = npos) override;
+			size_t write(const byte* buf, size_t len) override;
+
+			bool is_open() const override { return handler.is_open(); }
+
+		private:
+			std::fstream handler;
+
+			natural_file(const string& path, mode flags = mode::read)
+				: handler{ path, convert_openmode(flags) }
+				, basic_file
+				  { 
+				  	mount_type::file
+				  	, flags
+				  	, bit_op::is_include(flags, mode::write) 
+						? 0 : std::filesystem::file_size(path)
+				  }
+			{}
+		};
+
+		class filesystem 
+			: public basic_file_system 
+		{
 		public:
 			using file_type = std::unique_ptr<basic_file>;
-			using basic_file_system::read;
 
 		public:
 			filesystem() = default;
@@ -57,17 +83,8 @@ namespace dl {
 
 			const string& absolute(const string& path) override;
 
-			// virtual path
-		//	virtual void set_alias(const string& path) { alias = path; }
-		//	virtual string get_alias() const { return alias; }
-
 			file_type open(const string& path, mode mode) const override;
 			bool close(file_type& file) const override;
-
-			size_t size(const file_type& file) const override;
-			size_t read(file_type& file, size_t len, byte* buf) override;
-			size_t write(file_type& file, size_t len, const byte* buf) override;
-
 
 			bool create(const string& path) override;
 			bool remove(const string& path, bool bRecursive = false) override;

@@ -32,7 +32,8 @@ filesystem::file_type filesystem::open(const string& path, mode mode) const
 	// TODO: adjust path!
 	
 	std::string real_path{ replace(path, alias, absolute_path) };
-	if (!std_fs::exists(real_path)) {
+	if (!bit_op::is_include(mode, mode::write) 
+	&&  !std_fs::exists(real_path)) {
 		return file_type{};
 	}
 	
@@ -41,13 +42,6 @@ filesystem::file_type filesystem::open(const string& path, mode mode) const
 	if (!res->handler.is_open()) {
 		return file_type{};
 	}
-	
-	res->filename = std::move(real_path);
-	res->size = std_fs::file_size(res->filename);
-	res->pos = 0;
-	
-	res->beg = 0;
-	res->end = res->size;
 	
 	return std::unique_ptr<natural_file>{ res };
 }
@@ -61,39 +55,35 @@ bool filesystem::close(file_type& file) const
 	return true;
 }
 
-size_t filesystem::size(const file_type& file) const
+size_t natural_file::read(byte* buf, size_t len)
 {
-	return file->size;
-}
+	if (!has_flag(mode::read)) return 0;
+	if (pos + len >= end) len = end - (1 + pos);
 
-size_t filesystem::read(file_type& file, size_t len, byte* buf)
-{
-	if (file->type != mount_type::file) return 0;
-
-	auto& handler = static_cast<natural_file*>(file.get())->handler;
-//	if ((handler.flags() & std::ios::in) == 0) return 0;
+	handler.seekg(pos - beg);
 	handler.read(buf, len);
+	seekg(len, seek_dir::cur);
 	return len;
 }
 
-size_t filesystem::write(file_type& file, size_t len, const byte* buf)
+size_t natural_file::write(const byte* buf, size_t len)
 {
-	if (file->type != mount_type::file) return 0;
+	if (!has_flag(mode::write)) return 0;
 
-	auto& handler = static_cast<natural_file*>(file.get())->handler;
-//	if ((handler.flags() & std::ios::out) == 0) return 0;
-	
 	handler.write(buf, len);
+	pos += len;
 	return len;
 }
 
 bool filesystem::create(const string& path)
 {
-	return std_fs::create_directories(path);
+	std::string real_path{ replace(path, alias, absolute_path) };
+	return std_fs::create_directories(real_path);
 }
 
 bool filesystem::remove(const string& path, bool bRecursive)
 {
-	if (bRecursive) return std_fs::remove(path);
-	return std_fs::remove_all(path);
+	std::string real_path{ replace(path, alias, absolute_path) };
+	if (bRecursive) return std_fs::remove(real_path);
+	return std_fs::remove_all(real_path);
 }

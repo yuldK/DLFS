@@ -15,6 +15,37 @@
 
 #include <filesystem>
 
+void read_operation(dl::filesystem::filesystem& fs, const std::string& path)
+{
+	using namespace fs;
+
+	auto fp = fs.open(path, fs::mode::read | fs::mode::binary);
+
+	std::vector<byte> buf;
+	buf.resize(fp->size());
+	fp->read(buf.data());
+	std::cout.write(buf.data(), buf.size());
+	std::cout << std::endl;
+	fs.close(fp);
+}
+
+void write_operation(dl::filesystem::filesystem& fs, const std::string& path)
+{
+	using namespace fs;
+	using namespace std::string_literals;
+
+	constexpr auto flags = mode::create 
+						 | mode::write 
+						 | mode::binary
+						 ;
+
+	auto fp = fs.open(path, flags);
+
+	std::string buf{ "hello, world!\nMy Name is yul."s };
+
+	fp->write(buf.data(), buf.length());
+	fs.close(fp);
+}
 int main()
 {
     using namespace fs;
@@ -31,10 +62,13 @@ int main()
 	filesystem fs;
 	fs.absolute(std::filesystem::current_path().string());
 	fs.set_alias("/");
+	fs.remove("/sample/");
+	fs.create("/sample/");
+	// read operation
+	read_operation(fs, "/sample.pack");
+	// write operation
+	write_operation(fs, "/sample/sample.out");
+	read_operation(fs, "/sample/sample.out");
 	
-	auto fp = fs.open("/sample.pack", fs::mode::read);
-	char buf[1024];
-	buf[fs.read(fp, buf)] = '\0';
-	std::cout << buf << std::endl;
-	fs.close(fp);
+	fs.remove("/sample/");
 }

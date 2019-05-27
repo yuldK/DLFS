@@ -2,7 +2,7 @@
 
 using namespace dl::filesystem;
 
-pack::file_type pack::open(const string& path, mode /*mode*/) const
+pack::file_type pack::open(const string& path, mode flags) const
 {
 	// TODO: adjust path!
 	string adj_path = path;
@@ -13,53 +13,42 @@ pack::file_type pack::open(const string& path, mode /*mode*/) const
 
 	auto&& info = filelist.at(adj_path);
 
-	pack_file* res = new pack_file{ this };
-	res->filename = std::move(adj_path);
-	res->size = info.size;
-	res->pos = info.offset;
+	pack_file* res = new pack_file	{	const_cast<pack&>(*this), 
+										flags, 
+										info.offset, 
+										info.size
+									};
 
 	return std::unique_ptr<pack_file>{ res };
 }
 
-bool dl::filesystem::pack::close(file_type& file) const
+bool pack::close(file_type& file) const
 {
 	file = nullptr;
 	return true;
 }
 
-size_t dl::filesystem::pack::size(const file_type& file) const
+size_t pack_file::read(byte* buf, size_t len)
 {
-	return file->size;
-}
-
-size_t dl::filesystem::pack::read(file_type& file, size_t len, byte* buf)
-{
-	std::lock_guard<std::mutex> guard{cs};
-	if (raw.flags() & std::ios::in) return 0;
-
-	raw.seekg(file->pos);
+	std::lock_guard<std::mutex> guard{ handler.cs };
+	if (!has_flag(mode::read)) return 0;
 	
-	if (file->pos + len > file->end) {
-		len = file->end - file->pos;
-	}
-
-	raw.read(buf, len);
+	const auto localend = end - beg;
+	if (pos + len >= localend) len = localend - (1 + pos);
+	
+	handler.raw.seekg(pos + beg);
+	handler.raw.read(buf, len);
+	seekg(len, seek_dir::cur);
 	return len;
 }
 
-size_t dl::filesystem::pack::write(file_type& file, size_t len, const byte* buf)
+size_t pack_file::write(const byte* /*buf*/, size_t len)
 {
-	std::lock_guard<std::mutex> guard{ cs };
-	if (raw.flags() & std::ios::out) return 0;
+	std::lock_guard<std::mutex> guard{ handler.cs };
+	if (!has_flag(mode::write)) return 0;
 
 	// not implemented ...
-	raw.seekg(file->pos);
-
-	if (file->pos + len > file->end) {
-		len = file->end - file->pos;
-	}
-
-	raw.write(buf, len);
+//	handler.append(buf, len);
 	return len;
 }
 

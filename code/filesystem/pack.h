@@ -12,6 +12,30 @@
 namespace dl {
 	namespace filesystem {
 
+		class pack_file
+			: public basic_file
+		{
+		public:
+			friend class pack;
+			using openmode = std::ios::openmode;
+
+		public:
+			size_t read(byte* buf, size_t len = npos) override;
+			size_t write(const byte* buf, size_t len) override;
+
+			bool is_open() const override { return true; }
+
+		private:
+			pack& handler;
+			pack_file(pack& p
+					, mode flags
+					, offset_type begin
+					, offset_type end) 
+				: handler{ p }
+				, basic_file{ mount_type::pack, flags, end, begin }
+			{}
+		};
+
 		class pack : public basic_file_system {
 			friend class pack_file;
 		public:
@@ -29,11 +53,6 @@ namespace dl {
 
 			file_type open(const string& path, mode mode) const override;
 			bool close(file_type& file) const override;
-
-			size_t size(const file_type& file) const override;
-			size_t read(file_type& file, size_t len, byte* buf) override;
-			size_t write(file_type& file, size_t len, const byte* buf) override;
-
 
 			virtual bool create(const string& path) = 0;
 			virtual bool remove(const string& path, bool bRecursive = false) = 0;
