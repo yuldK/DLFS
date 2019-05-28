@@ -12,7 +12,7 @@ namespace dl {
 
         using byte = char;
         using string = std::string;
-        constexpr uint32_t DL_MAGIC_SIGNITURE{ 'PROY' };
+        constexpr uint32_t DL_MAGIC_SIGNITURE{ 'DLFS' };
 
         enum class mode : char {
             unknown = 0b0000'0000,

@@ -6,32 +6,22 @@ namespace std_fs = std::filesystem;
 
 
 
-std::string replace(const std::string& str, const std::string& from, const std::string& to)
-{
-	string res = str;
-	size_t start_pos = 0; //string 처음부터 검사
-	//from을 찾을 수 없을 때까지
-	if ((start_pos = res.find(from, start_pos)) != std::string::npos)  
-	{
-		res.replace(start_pos, from.length(), to);
-		// 중복검사를 피하고 from.length() > to.length()인 경우를 위해서
-		start_pos += to.length(); 
-	}
-	return res;
-}
-
-
-
 const string& filesystem::absolute(const string& path)
 {
 	return absolute_path = (std_fs::canonical(path) / "").string();
 }
 
+string filesystem::adjust_path(const string& path) const
+{
+	string res = path;
+	if (res.find(alias, 0) == 0)
+		res.replace(0, alias.length(), absolute_path);
+	return res;
+}
+
 filesystem::file_type filesystem::open(const string& path, mode mode) const
 {
-	// TODO: adjust path!
-	
-	std::string real_path{ replace(path, alias, absolute_path) };
+	std::string real_path{ adjust_path(path) };
 	if (!bit_op::is_include(mode, mode::write) 
 	&&  !std_fs::exists(real_path)) {
 		return file_type{};
@@ -77,13 +67,13 @@ size_t natural_file::write(const byte* buf, size_t len)
 
 bool filesystem::create(const string& path)
 {
-	std::string real_path{ replace(path, alias, absolute_path) };
+	std::string real_path{ adjust_path(path) };
 	return std_fs::create_directories(real_path);
 }
 
 bool filesystem::remove(const string& path, bool bRecursive)
 {
-	std::string real_path{ replace(path, alias, absolute_path) };
+	std::string real_path{ adjust_path(path) };
 	if (bRecursive) return std_fs::remove(real_path);
 	return std_fs::remove_all(real_path);
 }

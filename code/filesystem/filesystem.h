@@ -23,10 +23,12 @@ namespace dl {
             virtual mount_type type() const = 0;
 
             virtual const string& absolute(const string& path) = 0;
-
+			
             // virtual path
             virtual void set_alias(const string& path) { alias = path; }
             virtual string get_alias() const { return alias; }
+
+			virtual string adjust_path(const string& path) const = 0;
 
             virtual file_type open(const string& path, mode mode) const = 0;
             virtual bool close(file_type& file) const = 0;
@@ -82,6 +84,7 @@ namespace dl {
 			mount_type type() const override { return mount_type::file; }
 
 			const string& absolute(const string& path) override;
+			string adjust_path(const string& path) const override;
 
 			file_type open(const string& path, mode mode) const override;
 			bool close(file_type& file) const override;

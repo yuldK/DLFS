@@ -2,7 +2,7 @@
 #define __DL_FS_PACK__
 #pragma once
 
-#include <filesystem.h>
+#include "filesystem.h"
 
 #include <mutex>
 #include <memory>
@@ -46,16 +46,19 @@ namespace dl {
 			mount_type type() const override { return mount_type::pack; }
 
 			const string& absolute(const string& path) override { return absolute_path = path; }
-
-			// virtual path
-		//	virtual void set_alias(const string& path) { alias = path; }
-		//	virtual string get_alias() const { return alias; }
+			string adjust_path(const string& path) const override;
 
 			file_type open(const string& path, mode mode) const override;
 			bool close(file_type& file) const override;
 
-			virtual bool create(const string& path) = 0;
-			virtual bool remove(const string& path, bool bRecursive = false) = 0;
+			bool create(const string& path) override { path; return false; }
+			bool remove(const string& path, bool bRecursive = false) override { path; bRecursive; return false; }
+
+			static bool generate( const string& path
+								, const string& alias
+								, const string& out
+								, const string& filter_path = string{}
+			);
 
 		private:
 			std::fstream raw;

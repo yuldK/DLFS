@@ -6,6 +6,7 @@
 #include <filesystem/fs_type.h>
 #include <common/bit_op.h>
 
+#include <filesystem/pack.h>
 #include <filesystem/filesystem.h>
 
 // 실제 사용 시 dlfs::open 등의 방식으로 열 생각
@@ -49,18 +50,11 @@ void write_operation(dl::filesystem::filesystem& fs, const std::string& path)
 int main()
 {
     using namespace fs;
-    constexpr mode val = mode::read ^ mode::write;
-    constexpr mode val2 = val | mode::write;
 
-//    std::cout << std::boolalpha << dl::bit_op::is_include(val2, mode::read) << std::endl;
-//    decltype(mode::value_type{} | mode::value_type{}) a;
-//    mode my{ mode::write };
-//    constexpr mode p = ( mode::read | mode::write );
-//    mode q { mode::read | mode::write };
-//    my &= mode::read;
-// 
 	filesystem fs;
-	fs.absolute(std::filesystem::current_path().string());
+	auto current_path = std::filesystem::current_path();
+
+	fs.absolute(current_path.string());
 	fs.set_alias("/");
 	fs.remove("/sample/");
 	fs.create("/sample/");
@@ -71,4 +65,6 @@ int main()
 	read_operation(fs, "/sample/sample.out");
 	
 	fs.remove("/sample/");
+
+	pack::generate("code", "/code/", "bin/Debug/sample.pack");
 }

@@ -20,7 +20,7 @@ endfunction ()
 
 # must use to after project making
 function (set_working_dir module)
-    set_target_properties(${module} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$(OutDir)")
+    set_target_properties(${module} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "$(OutDir)..\\..\\")
 endfunction ()
 
 function (make_executable name system)
