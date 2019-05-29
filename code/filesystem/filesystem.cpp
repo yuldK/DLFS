@@ -1,4 +1,5 @@
 #include "filesystem.h"
+#include "path_util.h"
 #include <filesystem>
 
 using namespace dl::filesystem;
@@ -6,20 +7,17 @@ namespace std_fs = std::filesystem;
 
 
 
-const string& filesystem::absolute(const string& path)
+const path_type& filesystem::absolute(const path_type& path)
 {
-	return absolute_path = (std_fs::canonical(path) / "").string();
+	return absolute_path = add_slash(path, '/');
 }
 
-string filesystem::adjust_path(const string& path) const
+path_type filesystem::adjust_path(const path_type& path) const
 {
-	string res = path;
-	if (res.find(alias, 0) == 0)
-		res.replace(0, alias.length(), absolute_path);
-	return res;
+	return alias_absolute(path, absolute_path, alias);
 }
 
-filesystem::file_type filesystem::open(const string& path, mode mode) const
+filesystem::file_type filesystem::open(const path_type& path, mode mode) const
 {
 	std::string real_path{ adjust_path(path) };
 	if (!bit_op::is_include(mode, mode::write) 
@@ -45,35 +43,35 @@ bool filesystem::close(file_type& file) const
 	return true;
 }
 
-size_t natural_file::read(byte* buf, size_t len)
+natural_file::size_type natural_file::read(byte* buf, size_type len)
 {
 	if (!has_flag(mode::read)) return 0;
 	if (pos + len >= end) len = end - (1 + pos);
 
 	handler.seekg(pos - beg);
-	handler.read(buf, len);
+	handler.read(reinterpret_cast<char*>(buf), len);
 	seekg(len, seek_dir::cur);
 	return len;
 }
 
-size_t natural_file::write(const byte* buf, size_t len)
+natural_file::size_type natural_file::write(const byte* buf, size_type len)
 {
 	if (!has_flag(mode::write)) return 0;
 
-	handler.write(buf, len);
+	handler.write(reinterpret_cast<const char*>(buf), len);
 	pos += len;
 	return len;
 }
 
-bool filesystem::create(const string& path)
+bool filesystem::create(const path_type& path)
 {
-	std::string real_path{ adjust_path(path) };
+	auto real_path{ adjust_path(path) };
 	return std_fs::create_directories(real_path);
 }
 
-bool filesystem::remove(const string& path, bool bRecursive)
+bool filesystem::remove(const path_type& path, bool bRecursive)
 {
-	std::string real_path{ adjust_path(path) };
+	auto real_path{ adjust_path(path) };
 	if (bRecursive) return std_fs::remove(real_path);
 	return std_fs::remove_all(real_path);
 }

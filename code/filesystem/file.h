@@ -2,8 +2,9 @@
 #define __DL_FS_FILE__
 #pragma once
 
+#include <iosfwd>
 #include <fstream>
-#include "fs_type.h"
+#include "fsfwd.h"
 #include <mutex>
 
 #if defined(_DEBUG) && 0
@@ -13,18 +14,10 @@
 namespace dl {
     namespace filesystem {
 
-		class pack;
-
-		// 실제로 pack에서 호출할 땐 pack의
-		// file stream을 가지도록 한다.
-		// read 연산일 경우 여러 군데에서 읽어도 되는지
-		// 관련 레퍼런스를 조사한다.
-		// 읽는 건 휘발성 연산이라고 생각.
-		// eof 구현할 것. eof 뿐 아니라 C style의 필요 함수 wrapping
         class basic_file {
 		public:
-			using size_type = size_t;
-			using offset_type = size_t;
+			using size_type = std::streamsize;
+			using offset_type = std::streamoff;
 
 			constexpr static offset_type npos =
 				std::numeric_limits<offset_type>::max();
@@ -34,12 +27,12 @@ namespace dl {
 			friend class basic_file_system;
 			
 		public:
-			virtual size_t read(byte* buf, size_t len = npos) = 0;
-			virtual size_t write(const byte* buf, size_t len) = 0;
+			virtual size_type read(byte* buf, size_type len = npos) = 0;
+            virtual size_type write(const byte* buf, size_type len) = 0;
 
 			virtual bool is_open() const = 0;
 
-			virtual size_t size() const { return end - beg; }
+			virtual size_type size() const { return end - beg; }
 			virtual bool eof() const { return pos >= end; }
 
 			bool has_flag(mode mode) const { return ((flags & mode) != mode::unknown); }

@@ -6,11 +6,18 @@
 #include <cstdint>
 #include <type_traits>
 #include <common/bit_op.h>
+#include <filesystem>
 
 namespace dl {
     namespace filesystem {
 
+#if defined(_MSVC_LANG) && _MSVC_LANG < 201703
         using byte = char;
+#else
+        using byte = std::byte;
+#endif
+
+        using path_type = std::string;
         using string = std::string;
         constexpr uint32_t DL_MAGIC_SIGNITURE{ 'DLFS' };
 

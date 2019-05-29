@@ -4,6 +4,10 @@ make_library(${target} "STATIC")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
+# use mio
+include_directories(${MIO_INCLUDE_PATH})
+message (STATUS "mio include path is ${MIO_INCLUDE_PATH}")
+
 add_sources(${target}
     "pack"
     "pack.cpp"
@@ -23,7 +27,8 @@ add_sources(${target}
 add_sources(${target}
     "Header Files"
     "file.h"
-    "fs_type.h"
+    "fsfwd.h"
+	"path_util.h"
 )
 
 add_sources(${target}

@@ -4,7 +4,7 @@
 
 #include <common/common.h>
 #include "file.h"
-#include "fs_type.h"
+#include "fsfwd.h"
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -22,23 +22,23 @@ namespace dl {
 
             virtual mount_type type() const = 0;
 
-            virtual const string& absolute(const string& path) = 0;
-			
+            virtual const path_type& absolute(const path_type& path) = 0;
+
             // virtual path
-            virtual void set_alias(const string& path) { alias = path; }
-            virtual string get_alias() const { return alias; }
+            virtual void set_alias(const path_type& path) { alias = path; }
+            virtual path_type get_alias() const { return alias; }
 
-			virtual string adjust_path(const string& path) const = 0;
+            virtual path_type adjust_path(const path_type& path) const = 0;
 
-            virtual file_type open(const string& path, mode mode) const = 0;
+            virtual file_type open(const path_type& path, mode mode) const = 0;
             virtual bool close(file_type& file) const = 0;
 
-            virtual bool create(const string& path) = 0;
-            virtual bool remove(const string& path, bool bRecursive = false) = 0;
+            virtual bool create(const path_type& path) = 0;
+            virtual bool remove(const path_type& path, bool bRecursive = false) = 0;
 
         protected:
-            string absolute_path;
-            string alias;
+            path_type absolute_path;
+            path_type alias;
         };
 
 
@@ -51,15 +51,15 @@ namespace dl {
 			using openmode = std::ios::openmode;
 
 		public:
-			size_t read(byte* buf, size_t len = npos) override;
-			size_t write(const byte* buf, size_t len) override;
+            size_type read(byte* buf, size_type len = npos) override;
+            size_type write(const byte* buf, size_type len) override;
 
 			bool is_open() const override { return handler.is_open(); }
 
 		private:
 			std::fstream handler;
 
-			natural_file(const string& path, mode flags = mode::read)
+			natural_file(const path_type& path, mode flags = mode::read)
 				: handler{ path, convert_openmode(flags) }
 				, basic_file
 				  { 
@@ -83,14 +83,14 @@ namespace dl {
 
 			mount_type type() const override { return mount_type::file; }
 
-			const string& absolute(const string& path) override;
-			string adjust_path(const string& path) const override;
+			const path_type& absolute(const path_type& path) override;
+			path_type adjust_path(const path_type& path) const override;
 
-			file_type open(const string& path, mode mode) const override;
+			file_type open(const path_type& path, mode mode) const override;
 			bool close(file_type& file) const override;
 
-			bool create(const string& path) override;
-			bool remove(const string& path, bool bRecursive = false) override;
+			bool create(const path_type& path) override;
+			bool remove(const path_type& path, bool bRecursive = false) override;
 
 		};
     }
