@@ -13,4 +13,5 @@ add_sources(${target}
     "Header Files"
     "common.h"
     "bit_op.h"
+	"group.h"
 )

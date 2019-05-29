@@ -3,7 +3,7 @@
 #include <iostream>
 #include <type_traits>
 #include <common/common.h>
-#include <filesystem/fs_type.h>
+#include <filesystem/fsfwd.h>
 #include <common/bit_op.h>
 
 #include <filesystem/pack.h>
@@ -15,6 +15,7 @@
 // 함수 포인터를 할당하지 않다가 초기화 함수에서 할당하는 건 어떨까?
 
 #include <filesystem>
+std::filesystem::path current_path;
 
 void read_operation(dl::filesystem::filesystem& fs, const std::string& path)
 {
@@ -22,10 +23,10 @@ void read_operation(dl::filesystem::filesystem& fs, const std::string& path)
 
 	auto fp = fs.open(path, fs::mode::read | fs::mode::binary);
 
-	std::vector<byte> buf;
+	std::vector<fs::byte> buf;
 	buf.resize(fp->size());
 	fp->read(buf.data());
-	std::cout.write(buf.data(), buf.size());
+	std::cout.write(reinterpret_cast<char*>(buf.data()), buf.size());
 	std::cout << std::endl;
 	fs.close(fp);
 }
@@ -44,16 +45,42 @@ void write_operation(dl::filesystem::filesystem& fs, const std::string& path)
 
 	std::string buf{ "hello, world!\nMy Name is yul."s };
 
-	fp->write(buf.data(), buf.length());
+	fp->write(reinterpret_cast<fs::byte*>(buf.data()), buf.length());
 	fs.close(fp);
 }
+
+void pack_read()
+{
+    auto fail_exit = []() { std::cout << "fail to load pack..." << std::endl; };
+
+    std::unique_ptr<fs::pack> pack;
+    try {
+        pack = std::make_unique<fs::pack>("bin/Debug/sample.pack");
+    } catch (...) {
+        return fail_exit();
+    }
+   
+    auto fp = pack->open("/code/CMakeLists.txt");
+    if (!fp) return fail_exit();
+
+    std::string str;
+    str.resize(fp->size());
+
+    fp->read(reinterpret_cast<fs::byte*>(str.data()));
+
+    std::cout << str << std::endl;
+}
+
+#include "filesystem/path_util.h"
+#include <string_view>
+
 int main()
 {
-    using namespace fs;
+	using namespace fs;
+	current_path = std::filesystem::current_path().parent_path().parent_path();
+	SetCurrentDirectory(current_path.string().c_str());
 
 	filesystem fs;
-	auto current_path = std::filesystem::current_path();
-
 	fs.absolute(current_path.string());
 	fs.set_alias("/");
 	fs.remove("/sample/");
@@ -67,4 +94,6 @@ int main()
 	fs.remove("/sample/");
 
 	pack::generate("code", "/code/", "bin/Debug/sample.pack");
+
+    pack_read();
 }

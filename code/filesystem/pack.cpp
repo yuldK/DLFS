@@ -1,30 +1,29 @@
 #include "pack.h"
+#include "path_util.h"
 #include <filesystem>
+
 using namespace dl::filesystem;
 namespace std_fs = std::filesystem;
 
-string pack::adjust_path(const string& path) const
-{
-	using namespace std::string_literals;
 
-	string res = path;
-	if (res.find(alias, 0) == 0)
-		res.replace(0, alias.length(), ""s);
-	return res;
+
+path_type pack::adjust_path(const path_type& path) const
+{
+	return alias_relative(path, absolute_path, alias);
 }
 
-pack::file_type pack::open(const string& path, mode flags) const
+pack::file_type pack::open(const path_type& path, mode flags) const
 {
 	// TODO: adjust path!
-	string adj_path{ adjust_path(path) };
-	if (0 != filelist.count(adj_path))
+    string adj_path{ adjust_path(path) };
+	if (0 == filelist.count(adj_path))
 	{
 		return file_type{ nullptr };
 	}
 
 	auto&& info = filelist.at(adj_path);
 
-	pack_file* res = new pack_file	{	const_cast<pack&>(*this), 
+	pack_file* res = new pack_file	{	raw.file_handle(), 
 										flags, 
 										info.offset, 
 										info.size
@@ -39,26 +38,16 @@ bool pack::close(file_type& file) const
 	return true;
 }
 
-size_t pack_file::read(byte* buf, size_t len)
+pack_file::size_type pack_file::read(fs::byte* buf, size_type len)
 {
-	std::lock_guard<std::mutex> guard{ handler.cs };
 	if (!has_flag(mode::read)) return 0;
 	
 	const auto localend = end - beg;
 	if (pos + len >= localend) len = localend - (1 + pos);
 	
-	handler.raw.seekg(pos + beg);
-	handler.raw.read(buf, len);
-	seekg(len, seek_dir::cur);
-	return len;
-}
+    memcpy(reinterpret_cast<char*>(buf), &handler[pos], len);
 
-// must to be not work!
-//	pack system's write operation is 
-//	just worked in pack generation process...
-size_t pack_file::write(const byte* /*buf*/, size_t /*len*/)
-{
-	return 0;
+	return len;
 }
 
 #include <chrono>
@@ -68,48 +57,87 @@ size_t pack_file::write(const byte* /*buf*/, size_t /*len*/)
 namespace 
 {
 	template<typename T>
-	constexpr void casting_assign(byte*& pointer, const T& value)
+	void write_buffer(fs::byte*& pointer, const T& value)
+    {
+        *reinterpret_cast<T*>(pointer) = value;
+        std::advance(pointer, sizeof(T));
+    }
+
+    void write_buffer(fs::byte*& pointer, const char* str, size_t len)
+    {
+        write_buffer(pointer, static_cast<uint8_t>(len));
+        memcpy(pointer, str, len);
+        std::advance(pointer, len);
+    }
+
+    template<>
+    void write_buffer(fs::byte*& pointer, const string& value)
 	{
-		*reinterpret_cast<T*>(pointer) = value;
-		std::advance(pointer, sizeof(T));
+		return write_buffer(pointer, value.data(), value.length());
 	}
 
-	void casting_assign(byte*& pointer, const char* str, size_t len)
-	{
-		*reinterpret_cast<uint8_t*>(pointer) = static_cast<uint8_t>(len);
-		std::advance(pointer, 1);
-		for (size_t i = 0; i < len; ++i) pointer[i] = str[i];
-		std::advance(pointer, len);
-	}
 
-	template<>
-	void casting_assign(byte * &pointer, const string & value)
-	{
-		return casting_assign(pointer, value.data(), value.length());
-	}
 
-	struct fileinfo
+    template<typename T>
+    T read_buffer(const char*& pointer)
+    {
+        T value = *reinterpret_cast<const T*>(pointer);
+        std::advance(pointer, sizeof(T));
+        return value;
+    }
+    
+    void read_buffer(fs::byte* value, uint8_t len, const char*& pointer)
+    {
+        memcpy(value, pointer, len);
+        std::advance(pointer, len);
+    }
+
+    fs::string read_buffer(uint8_t len, const char*& pointer)
+    {
+        fs::string res{ pointer, pointer + len };
+        std::advance(pointer, len);
+        return res;
+    }
+
+    template<typename T>
+    void read_buffer(T& value, const char*& pointer)
+    {
+        value = read_buffer<T>(pointer);
+    }
+
+    template<>
+    void read_buffer(string& value, const char*& pointer)
+    {
+        value = std::move(read_buffer(read_buffer<uint8_t>(pointer), pointer));
+    }
+
+
+
+	struct file_info
 	{
+		std_fs::path real;
 		string path;
 		size_t size;
 
-		fileinfo(string&& path, size_t size)
-			: path{ std::move(path) }
+		file_info(std_fs::path&& real, string&& path, size_t size)
+			: real{ std::move(real) }
+			, path{ std::move(path) }
 			, size{ size }
 		{}
 	};
 
-	bool get_filelist(std::vector<fileinfo>& vfilelist, const std_fs::path& base, const std_fs::path& path, bool bRecursive = true)
+	bool get_filelist(std::vector<file_info>& vfilelist, const path_type& base, const path_type& alias, const std_fs::path& path, bool bRecursive = true)
 	{
 		if (!std_fs::is_directory(path)) return false;
 		for (auto&& entry : std_fs::directory_iterator{ path })
 		{
 			if (std_fs::is_regular_file(entry.status()))
-				vfilelist.emplace_back(	  entry.path().lexically_relative(base).string()
+				vfilelist.emplace_back(	  std_fs::absolute(entry.path())
+										, alias_relative(entry.path().generic_string(), base, alias)
 										, std_fs::file_size(entry.path())
 				);
 			else if (bRecursive && std_fs::is_directory(entry.status()))
-				get_filelist(vfilelist, base, entry.path(), bRecursive);
+				get_filelist(vfilelist, base, alias, entry.path(), bRecursive);
 		}
 		return true;
 	}
@@ -117,53 +145,96 @@ namespace
 
 
 
-bool pack::generate(const string& path, const string& alias, const string& out_dir, const string& filter_path)
+using off_type = pack_file::offset_type;
+constexpr auto body_static_size = sizeof(uint8_t) + sizeof(off_type) + sizeof(size_t);
+
+pack::pack(const path_type& path)
 {
-	filter_path;
-	if (!std_fs::exists(path)) return false;
+    absolute_path = path;
+    open();
+}
 
-	const std_fs::path base_path = path;
-	std::vector<fileinfo> filelist;
-	if (!get_filelist(filelist, base_path, path)) return false;
+void pack::open()
+{
+    if (!std_fs::exists(absolute_path)) throw std::exception{ "no file exists!" };
 
-	// 1 kb
-	byte header[1024];
-	byte* hp = header;
+    std::error_code err;
+    raw.map(remove_slash(absolute_path), err);
 
-	// signiture, 4 byte
-	casting_assign(hp, DL_MAGIC_SIGNITURE);
+    if (err) throw std::exception{ "do not open an invalid file!" };
+    const char* rp = &raw[0];
+    // read header
+    if (read_buffer<uint32_t>(rp) != DL_MAGIC_SIGNITURE) throw std::exception{ "signiture dismatched!" };
 
-	// alias, 1 byte(len) + length 
-	casting_assign(hp, alias);
+    // get alias
+    read_buffer(alias, rp);
 
-	// timestamp, 8 byte
-	using clock = std::chrono::system_clock;
-	casting_assign(hp, clock::to_time_t(clock::now()));
+    // get timestamp
+    __time64_t timestamp;
+    read_buffer(timestamp, rp);
 
-	// file amount, 2 byte
-	casting_assign(hp, static_cast<uint16_t>(filelist.size()));
+    uint16_t filelist_amount;
+    read_buffer(filelist_amount, rp);
 
-	
+    // jump to read body
+    rp = &raw[1024];
 
-	constexpr auto flags	= std::ios::out 
-							| std::ios::trunc 
-							| std::ios::binary
-		;
+    for (size_t i = 0; i < filelist_amount; ++i) {
+        record_info info;
+        string key_path;
 
-	std::ofstream out{ out_dir, flags };
+        read_buffer(info.offset, rp);
+        read_buffer(info.size, rp);
+        read_buffer(key_path, rp);
 
-	if (!out.is_open()) return false;
+        filelist.insert(std::make_pair(std::move(key_path), std::move(info)));
+    }
+}
 
-	out.write(header, 1024);
-	
-	using off_type = std::ofstream::off_type;
+bool pack::generate(const path_type& path, const path_type& alias, const path_type& out_dir, const path_type& filter_path)
+{
+    filter_path;
+    if (!std_fs::exists(path)) return false;
 
-	off_type off_body = 1024;
-	off_type off_raw = off_body;
+    std::vector<file_info> filelist;
+    if (!get_filelist(filelist, path, alias, path)) return false;
+
+    // 1 kb
+    fs::byte header[1024];
+    fs::byte* hp = header;
+
+    // signiture, 4 byte
+    write_buffer(hp, DL_MAGIC_SIGNITURE);
+
+    // alias, 1 byte(len) + length 
+    write_buffer(hp, alias);
+
+    // timestamp, 8 byte
+    using clock = std::chrono::system_clock;
+    write_buffer(hp, clock::to_time_t(clock::now()));
+
+    // file amount, 2 byte
+    write_buffer(hp, static_cast<uint16_t>(filelist.size()));
+
+
+
+    constexpr auto flags = std::ios::out
+        | std::ios::trunc
+        | std::ios::binary
+        ;
+
+    std::ofstream out{ out_dir, flags };
+
+    if (!out.is_open()) return false;
+
+
+    out.write(reinterpret_cast<char*>(header), 1024);
+
+    off_type off_body = 1024;
+    off_type off_raw = off_body;
 
 	size_t best_size = 0;
 
-	constexpr auto body_static_size = sizeof(uint8_t) + sizeof(off_type) + sizeof(size_t);
 	for (const auto& p : filelist)
 	{
 		off_raw += (p.path.length() + body_static_size);
@@ -171,17 +242,17 @@ bool pack::generate(const string& path, const string& alias, const string& out_d
 	}
 
 	// { offset(8 byte) + size(8 byte) + length (1 byte) + string length() }
-	byte body[body_static_size + 256];
+	fs::byte body[body_static_size + 256];
 	for (auto&& info : filelist)
 	{
-		byte* pointer = body;
-		std::streamsize count = body_static_size + info.path.length();
+		fs::byte* pointer = body;
+        pack_file::size_type count = body_static_size + info.path.length();
 
-		casting_assign(pointer, off_raw);
-		casting_assign(pointer, info.size);
-		casting_assign(pointer, info.path);
+		write_buffer(pointer, off_raw);
+		write_buffer(pointer, info.size);
+		write_buffer(pointer, info.path);
 
-		out.write(body, count);
+		out.write(reinterpret_cast<const char*>(body), count);
 		off_body += count;
 		off_raw += info.size;
 	}
@@ -190,23 +261,23 @@ bool pack::generate(const string& path, const string& alias, const string& out_d
 	{
 		out.clear();
 		throw std::exception{ "calculation fail: don't match file size..." };
-		return false;
+	//	return false;
 	}
 
-	std::vector<byte> data;
+	std::vector<fs::byte> data;
 	data.resize(best_size);
 	for (auto&& info : filelist)
 	{
-		std::ifstream in{ base_path / info.path, std::ios::binary | std::ios::in };
+		std::ifstream in{ info.real, std::ios::binary | std::ios::in };
 
-		if (in.is_open()) in.read(data.data(), info.size);
+		if (in.is_open()) in.read(reinterpret_cast<char*>(data.data()), info.size);
 		else
 		{ 
 			throw std::exception{ "do not read file exception" };
-			std::fill(data.begin(), std::next(data.begin(), info.size), '\0');
+		//	std::fill(data.begin(), std::next(data.begin(), info.size), '\0');
 		}
 
-		out.write(data.data(), info.size);
+		out.write(reinterpret_cast<const char*>(data.data()), info.size);
 	}
 
 	out.close();
