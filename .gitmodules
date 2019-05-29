@@ -1,0 +1,4 @@
+[submodule "sdks/mio"]
+	path = sdks/mio
+	url = https://github.com/mandreyel/mio.git
+	branch = master
